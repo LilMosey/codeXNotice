@@ -1,3 +1,4 @@
+pub mod app_commands;
 pub mod detection;
 pub mod domain;
 pub mod notifications;

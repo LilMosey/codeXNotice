@@ -1,5 +1,11 @@
 fn main() {
     tauri::Builder::default()
+        .invoke_handler(tauri::generate_handler![
+            codex_notice::app_commands::get_rules,
+            codex_notice::app_commands::save_rules,
+            codex_notice::app_commands::get_events,
+            codex_notice::app_commands::get_diagnostics
+        ])
         .setup(|_app| {
             std::thread::spawn(|| {
                 let notifier = codex_notice::notifications::local::MacOsNotifier;

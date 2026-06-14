@@ -1,10 +1,11 @@
 use rusqlite::{params, Connection};
+use serde::Serialize;
 
 use crate::domain::decision::{NotificationDecision, NotificationEventStatus};
 use crate::domain::task::TaskRecord;
 use crate::storage::error::StorageError;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct NotificationEventRecord {
     pub id: String,
     pub task_id: String,
