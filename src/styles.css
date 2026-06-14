@@ -1,0 +1,181 @@
+:root {
+  color: #18212f;
+  background: #eef1f4;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+}
+
+body {
+  margin: 0;
+}
+
+.app-window {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  background: #f7f8fb;
+}
+
+.sidebar {
+  border-right: 1px solid #dde3ea;
+  background: #ffffff;
+  padding: 18px 14px;
+}
+
+.brand {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 8px;
+  margin-bottom: 22px;
+}
+
+.brand-mark {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  color: #ffffff;
+  background: #2f6f73;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.brand strong,
+.brand span {
+  display: block;
+}
+
+.brand strong {
+  font-size: 14px;
+}
+
+.brand span {
+  margin-top: 2px;
+  color: #6c7683;
+  font-size: 12px;
+}
+
+.nav-list {
+  display: grid;
+  gap: 4px;
+}
+
+.nav-item {
+  height: 36px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 12px;
+  color: #394552;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+}
+
+.nav-item.active {
+  color: #153a3d;
+  background: #e7f2f1;
+  font-weight: 700;
+}
+
+.workspace {
+  min-width: 0;
+  padding: 28px 32px;
+}
+
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: flex-start;
+  margin-bottom: 22px;
+}
+
+h1 {
+  margin: 0 0 6px;
+  font-size: 24px;
+  line-height: 1.2;
+}
+
+p {
+  margin: 0;
+  color: #65717f;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.primary-action {
+  min-width: 92px;
+  height: 36px;
+  border: 0;
+  border-radius: 8px;
+  color: #ffffff;
+  background: #2f6f73;
+  font: inherit;
+  font-weight: 700;
+}
+
+.rule-list {
+  display: grid;
+  gap: 10px;
+}
+
+.rule-row,
+.empty-row {
+  border: 1px solid #dfe5eb;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.rule-row {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 14px;
+}
+
+.drag-handle {
+  color: #8b96a3;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.rule-main {
+  min-width: 0;
+}
+
+.rule-main strong,
+.rule-main span {
+  display: block;
+}
+
+.rule-main strong {
+  margin-bottom: 3px;
+  font-size: 14px;
+}
+
+.rule-main span {
+  color: #667381;
+  font-size: 13px;
+}
+
+.status {
+  border-radius: 999px;
+  padding: 4px 9px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.status.enabled {
+  color: #1d5b3d;
+  background: #e4f3ea;
+}
+
+.empty-row {
+  padding: 16px;
+  color: #697583;
+  font-size: 13px;
+}
