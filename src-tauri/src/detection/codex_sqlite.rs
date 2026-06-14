@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 
+use chrono::{DateTime, Datelike, Timelike, Utc};
 use rusqlite::Connection;
 
 use crate::domain::task::{TaskRecord, Weekday};
@@ -41,6 +42,10 @@ pub fn find_state_databases(directory: &Path) -> Result<Vec<PathBuf>, CodexSqlit
 
 pub fn detect_completed_agent_jobs(path: &Path) -> Result<Vec<TaskRecord>, CodexSqliteError> {
     let connection = Connection::open(path)?;
+    if !table_exists(&connection, "agent_jobs")? {
+        return Ok(Vec::new());
+    }
+
     let mut statement = connection.prepare(
         r#"
         SELECT id, name, status, started_at, completed_at, last_error
@@ -76,6 +81,86 @@ pub fn detect_completed_agent_jobs(path: &Path) -> Result<Vec<TaskRecord>, Codex
 
     rows.collect::<Result<Vec<_>, _>>()
         .map_err(CodexSqliteError::from)
+}
+
+pub fn detect_recent_threads(
+    path: &Path,
+    minimum_updated_at_ms: i64,
+) -> Result<Vec<TaskRecord>, CodexSqliteError> {
+    let connection = Connection::open(path)?;
+    if !table_exists(&connection, "threads")? {
+        return Ok(Vec::new());
+    }
+
+    let mut statement = connection.prepare(
+        r#"
+        SELECT id, title, created_at_ms, updated_at_ms, created_at, updated_at
+        FROM threads
+        WHERE updated_at_ms IS NOT NULL
+          AND updated_at_ms >= ?1
+          AND source NOT LIKE '%subagent%'
+        "#,
+    )?;
+
+    let rows = statement.query_map([minimum_updated_at_ms], |row| {
+        let id: String = row.get(0)?;
+        let title: String = row.get(1)?;
+        let created_at_ms: Option<i64> = row.get(2)?;
+        let updated_at_ms: Option<i64> = row.get(3)?;
+        let created_at: i64 = row.get(4)?;
+        let updated_at: i64 = row.get(5)?;
+
+        let started_ms = created_at_ms.unwrap_or(created_at * 1000);
+        let completed_ms = updated_at_ms.unwrap_or(updated_at * 1000);
+        let duration_seconds = if completed_ms >= started_ms {
+            ((completed_ms - started_ms) / 1000) as u64
+        } else {
+            0
+        };
+        let (completed_at_weekday, completed_at_seconds) =
+            timestamp_parts(completed_ms / 1000);
+
+        Ok(TaskRecord {
+            id: format!("thread:{id}:{completed_ms}"),
+            title: if title.trim().is_empty() {
+                "Codex 桌面任务".to_string()
+            } else {
+                title
+            },
+            duration_seconds,
+            completed_at_weekday,
+            completed_at_seconds,
+            success: true,
+        })
+    })?;
+
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(CodexSqliteError::from)
+}
+
+fn table_exists(connection: &Connection, table_name: &str) -> Result<bool, CodexSqliteError> {
+    let count: i64 = connection.query_row(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+        [table_name],
+        |row| row.get(0),
+    )?;
+    Ok(count > 0)
+}
+
+fn timestamp_parts(timestamp_seconds: i64) -> (Weekday, u32) {
+    let datetime = DateTime::<Utc>::from_timestamp(timestamp_seconds, 0)
+        .unwrap_or_else(|| DateTime::<Utc>::from_timestamp(0, 0).expect("unix epoch"));
+    let weekday = match datetime.weekday() {
+        chrono::Weekday::Mon => Weekday::Mon,
+        chrono::Weekday::Tue => Weekday::Tue,
+        chrono::Weekday::Wed => Weekday::Wed,
+        chrono::Weekday::Thu => Weekday::Thu,
+        chrono::Weekday::Fri => Weekday::Fri,
+        chrono::Weekday::Sat => Weekday::Sat,
+        chrono::Weekday::Sun => Weekday::Sun,
+    };
+    let seconds = datetime.num_seconds_from_midnight();
+    (weekday, seconds)
 }
 
 #[cfg(test)]
@@ -148,5 +233,51 @@ mod tests {
         assert_eq!(tasks[0].title, "Long Codex Task");
         assert_eq!(tasks[0].duration_seconds, 3);
         assert!(tasks[0].success);
+    }
+
+    #[test]
+    fn detects_recent_desktop_threads_from_sqlite() {
+        let db = NamedTempFile::new().expect("create temp database");
+        let connection = Connection::open(db.path()).expect("open temp database");
+        connection
+            .execute_batch(
+                r#"
+                CREATE TABLE threads (
+                    id TEXT PRIMARY KEY,
+                    title TEXT NOT NULL,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL,
+                    source TEXT NOT NULL,
+                    cwd TEXT NOT NULL,
+                    created_at_ms INTEGER,
+                    updated_at_ms INTEGER
+                );
+
+                INSERT INTO threads (
+                    id, title, created_at, updated_at, source, cwd, created_at_ms, updated_at_ms
+                ) VALUES
+                ('thread-1', '普通 Codex 任务', 100, 140, 'vscode', '/tmp/project', 100000, 140000),
+                ('thread-2', '旧任务', 10, 20, 'vscode', '/tmp/project', 10000, 20000),
+                ('thread-3', '子任务审批', 100, 140, '{"subagent":{"other":"guardian"}}', '/tmp/project', 100000, 140000);
+                "#,
+            )
+            .expect("seed database");
+
+        let tasks = super::detect_recent_threads(db.path(), 120_000).expect("detect threads");
+
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].id, "thread:thread-1:140000");
+        assert_eq!(tasks[0].title, "普通 Codex 任务");
+        assert_eq!(tasks[0].duration_seconds, 40);
+    }
+
+    #[test]
+    fn missing_threads_table_returns_no_recent_threads() {
+        let db = NamedTempFile::new().expect("create temp database");
+        Connection::open(db.path()).expect("open temp database");
+
+        let tasks = super::detect_recent_threads(db.path(), 1).expect("detect threads");
+
+        assert!(tasks.is_empty());
     }
 }
