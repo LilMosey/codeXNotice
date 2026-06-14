@@ -24,6 +24,38 @@ pub fn initialize(connection: &Connection) -> Result<(), StorageError> {
             created_at INTEGER NOT NULL,
             updated_at INTEGER NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS detected_tasks (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            duration_seconds INTEGER NOT NULL,
+            completed_weekday TEXT NOT NULL,
+            completed_seconds INTEGER NOT NULL,
+            success INTEGER NOT NULL,
+            source TEXT NOT NULL,
+            created_at INTEGER NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS notification_events (
+            id TEXT PRIMARY KEY,
+            task_id TEXT NOT NULL,
+            rule_id TEXT,
+            decision_json TEXT NOT NULL,
+            status TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            FOREIGN KEY(task_id) REFERENCES detected_tasks(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS delayed_tasks (
+            rule_id TEXT NOT NULL,
+            task_id TEXT NOT NULL,
+            queued_at INTEGER NOT NULL,
+            expires_at INTEGER NOT NULL,
+            sent_at INTEGER,
+            PRIMARY KEY(rule_id, task_id),
+            FOREIGN KEY(task_id) REFERENCES detected_tasks(id)
+        );
         "#,
     )?;
 
@@ -103,5 +135,22 @@ mod tests {
 
         assert_eq!(count, 1);
         assert_eq!(rule_name, "默认规则");
+    }
+
+    #[test]
+    fn initialize_creates_history_and_delay_tables() {
+        let connection = Connection::open_in_memory().expect("open in-memory database");
+
+        initialize(&connection).expect("initialize schema");
+
+        let table_count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN ('detected_tasks', 'notification_events', 'delayed_tasks')",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count tables");
+
+        assert_eq!(table_count, 3);
     }
 }
