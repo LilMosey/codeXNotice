@@ -210,7 +210,7 @@ function renderRuleEditor(rule: NotificationRule) {
 
       <label>
         <span>耗时范围（分钟）</span>
-        <input name="duration" value="${escapeAttribute(ranges)}" placeholder="例如：1-50,60-70,120+" />
+        <input name="duration" value="${escapeAttribute(ranges)}" placeholder="留空表示所有耗时，例如：1-50,60-70,120+" />
       </label>
 
       <label class="toggle-line">
@@ -218,7 +218,7 @@ function renderRuleEditor(rule: NotificationRule) {
         <span>每时每刻都允许通知</span>
       </label>
 
-      <fieldset ${always ? "disabled" : ""}>
+      <fieldset>
         <legend>可通知星期</legend>
         <div class="weekday-grid">
           ${weekdayLabels
@@ -237,11 +237,11 @@ function renderRuleEditor(rule: NotificationRule) {
       <div class="time-grid">
         <label>
           <span>开始时间</span>
-          <input type="time" name="start" value="${secondsToTime(window.start_seconds)}" ${always ? "disabled" : ""} />
+          <input type="time" name="start" value="${secondsToTime(window.start_seconds)}" />
         </label>
         <label>
           <span>结束时间</span>
-          <input type="time" name="end" value="${secondsToTime(window.end_seconds)}" ${always ? "disabled" : ""} />
+          <input type="time" name="end" value="${secondsToTime(window.end_seconds)}" />
         </label>
       </div>
 
@@ -335,6 +335,12 @@ function bindEvents() {
   });
 
   root.querySelector<HTMLFormElement>("[data-role='rule-editor']")?.addEventListener("submit", saveCurrentRule);
+  root.querySelectorAll<HTMLInputElement>("input[name='weekday'], input[name='start'], input[name='end']").forEach((input) => {
+    input.addEventListener("change", () => {
+      const always = root.querySelector<HTMLInputElement>("input[name='always']");
+      if (always) always.checked = false;
+    });
+  });
   root.querySelector<HTMLButtonElement>("[data-action='delete-rule']")?.addEventListener("click", deleteCurrentRule);
   root.querySelector<HTMLButtonElement>("[data-action='move-up']")?.addEventListener("click", () => moveCurrentRule(-1));
   root.querySelector<HTMLButtonElement>("[data-action='move-down']")?.addEventListener("click", () => moveCurrentRule(1));
