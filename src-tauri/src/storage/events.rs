@@ -115,6 +115,62 @@ pub fn list_events(connection: &Connection) -> Result<Vec<NotificationEventRecor
     Ok(events)
 }
 
+pub fn list_events_by_status(
+    connection: &Connection,
+    status: NotificationEventStatus,
+) -> Result<Vec<NotificationEventRecord>, StorageError> {
+    let status_json = serde_json::to_string(&status)?;
+    let mut statement = connection.prepare(
+        r#"
+        SELECT id, task_id, rule_id, decision_json, status
+        FROM notification_events
+        WHERE status = ?1
+        ORDER BY created_at ASC, id ASC
+        "#,
+    )?;
+
+    let rows = statement.query_map(params![status_json], |row| {
+        Ok(StoredEventRow {
+            id: row.get(0)?,
+            task_id: row.get(1)?,
+            rule_id: row.get(2)?,
+            decision_json: row.get(3)?,
+            status_json: row.get(4)?,
+        })
+    })?;
+
+    let mut events = Vec::new();
+    for row in rows {
+        let row = row?;
+        events.push(NotificationEventRecord {
+            id: row.id,
+            task_id: row.task_id,
+            rule_id: row.rule_id,
+            decision: serde_json::from_str(&row.decision_json)?,
+            status: serde_json::from_str(&row.status_json)?,
+        });
+    }
+
+    Ok(events)
+}
+
+pub fn update_event_status(
+    connection: &Connection,
+    event_id: &str,
+    status: NotificationEventStatus,
+) -> Result<(), StorageError> {
+    connection.execute(
+        r#"
+        UPDATE notification_events
+        SET status = ?1, updated_at = strftime('%s','now')
+        WHERE id = ?2
+        "#,
+        params![serde_json::to_string(&status)?, event_id],
+    )?;
+
+    Ok(())
+}
+
 pub fn queue_delayed_task(
     connection: &Connection,
     rule_id: &str,
@@ -248,5 +304,35 @@ mod tests {
         record_task(&connection, &task("task-1"), "codex-sqlite").expect("record task");
 
         assert!(task_exists(&connection, "task-1").expect("check recorded task"));
+    }
+
+    #[test]
+    fn list_by_status_and_update_event_status() {
+        let connection = Connection::open_in_memory().expect("open database");
+        schema::initialize(&connection).expect("initialize schema");
+        record_task(&connection, &task("task-1"), "codex-sqlite").expect("record task");
+        record_event(
+            &connection,
+            "event-1",
+            "task-1",
+            &NotificationDecision::SendNow {
+                rule_id: "default-rule".to_string(),
+            },
+            NotificationEventStatus::Pending,
+        )
+        .expect("record event");
+
+        let pending =
+            list_events_by_status(&connection, NotificationEventStatus::Pending).expect("pending");
+        assert_eq!(pending.len(), 1);
+
+        update_event_status(&connection, "event-1", NotificationEventStatus::Sent)
+            .expect("update status");
+
+        let pending =
+            list_events_by_status(&connection, NotificationEventStatus::Pending).expect("pending");
+        let sent = list_events_by_status(&connection, NotificationEventStatus::Sent).expect("sent");
+        assert!(pending.is_empty());
+        assert_eq!(sent.len(), 1);
     }
 }

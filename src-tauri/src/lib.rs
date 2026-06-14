@@ -1,7 +1,9 @@
 pub mod detection;
 pub mod domain;
+pub mod notifications;
 pub mod processor;
 pub mod rules;
+pub mod runtime;
 pub mod scanner;
 pub mod scheduler;
 pub mod storage;
