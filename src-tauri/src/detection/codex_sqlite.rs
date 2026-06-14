@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use rusqlite::Connection;
 
@@ -8,6 +8,31 @@ use crate::domain::task::{TaskRecord, Weekday};
 pub enum CodexSqliteError {
     #[error("sqlite error: {0}")]
     Sqlite(#[from] rusqlite::Error),
+    #[error("io error: {0}")]
+    Io(#[from] std::io::Error),
+}
+
+pub fn find_state_databases(directory: &Path) -> Result<Vec<PathBuf>, CodexSqliteError> {
+    let mut files = Vec::new();
+
+    for entry in std::fs::read_dir(directory)? {
+        let entry = entry?;
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+
+        let Some(file_name) = path.file_name().and_then(|name| name.to_str()) else {
+            continue;
+        };
+
+        if file_name.starts_with("state_") && file_name.ends_with(".sqlite") {
+            files.push(path);
+        }
+    }
+
+    files.sort();
+    Ok(files)
 }
 
 pub fn detect_completed_agent_jobs(path: &Path) -> Result<Vec<TaskRecord>, CodexSqliteError> {
@@ -53,6 +78,18 @@ pub fn detect_completed_agent_jobs(path: &Path) -> Result<Vec<TaskRecord>, Codex
 mod tests {
     use rusqlite::Connection;
     use tempfile::NamedTempFile;
+
+    #[test]
+    fn finds_only_codex_state_sqlite_files() {
+        let directory = tempfile::tempdir().expect("create temp directory");
+        std::fs::write(directory.path().join("state_5.sqlite"), "").expect("write state db");
+        std::fs::write(directory.path().join("state_5.sqlite-wal"), "").expect("write wal");
+        std::fs::write(directory.path().join("logs_2.sqlite"), "").expect("write logs db");
+
+        let files = super::find_state_databases(directory.path()).expect("find state databases");
+
+        assert_eq!(files, vec![directory.path().join("state_5.sqlite")]);
+    }
 
     #[test]
     fn detects_completed_agent_jobs_once_from_sqlite() {

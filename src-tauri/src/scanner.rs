@@ -1,5 +1,8 @@
+use std::path::Path;
+
 use rusqlite::Connection;
 
+use crate::detection::codex_sqlite::{self, CodexSqliteError};
 use crate::domain::rule::NotificationRule;
 use crate::domain::task::TaskRecord;
 use crate::processor;
@@ -10,6 +13,38 @@ pub struct ScanSummary {
     pub discovered: usize,
     pub skipped_existing: usize,
     pub processed: usize,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ScannerError {
+    #[error("codex sqlite error: {0}")]
+    CodexSqlite(#[from] CodexSqliteError),
+    #[error("storage error: {0}")]
+    Storage(#[from] StorageError),
+}
+
+pub fn scan_codex_state_files(
+    connection: &Connection,
+    rules: &[NotificationRule],
+    codex_directory: &Path,
+    now_epoch_seconds: i64,
+    delay_ttl_seconds: i64,
+) -> Result<ScanSummary, ScannerError> {
+    let mut tasks = Vec::new();
+
+    for database_path in codex_sqlite::find_state_databases(codex_directory)? {
+        tasks.extend(codex_sqlite::detect_completed_agent_jobs(&database_path)?);
+    }
+
+    scan_tasks(
+        connection,
+        rules,
+        &tasks,
+        "codex-sqlite",
+        now_epoch_seconds,
+        delay_ttl_seconds,
+    )
+    .map_err(ScannerError::from)
 }
 
 pub fn scan_tasks(
@@ -56,6 +91,7 @@ mod tests {
     };
     use crate::domain::task::Weekday;
     use crate::storage::{events, schema};
+    use rusqlite::Connection;
 
     fn task(id: &str) -> TaskRecord {
         TaskRecord {
@@ -79,6 +115,41 @@ mod tests {
         }
     }
 
+    fn seed_codex_state_database(path: &std::path::Path) {
+        let connection = Connection::open(path).expect("open codex state database");
+        connection
+            .execute_batch(
+                r#"
+                CREATE TABLE agent_jobs (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    instruction TEXT NOT NULL,
+                    output_schema_json TEXT,
+                    input_headers_json TEXT NOT NULL,
+                    input_csv_path TEXT NOT NULL,
+                    output_csv_path TEXT NOT NULL,
+                    auto_export INTEGER NOT NULL DEFAULT 1,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL,
+                    started_at INTEGER,
+                    completed_at INTEGER,
+                    last_error TEXT,
+                    max_runtime_seconds INTEGER
+                );
+
+                INSERT INTO agent_jobs (
+                    id, name, status, instruction, input_headers_json, input_csv_path,
+                    output_csv_path, created_at, updated_at, started_at, completed_at, last_error
+                ) VALUES (
+                    'job-1', 'Long Codex Task', 'completed', 'Do work', '{}', '', '',
+                    1000, 4000, 1000, 4000, NULL
+                );
+                "#,
+            )
+            .expect("seed codex database");
+    }
+
     #[test]
     fn scan_tasks_processes_new_tasks_and_skips_existing_tasks() {
         let connection = Connection::open_in_memory().expect("open database");
@@ -98,5 +169,28 @@ mod tests {
         assert!(events
             .iter()
             .all(|event| event.status == NotificationEventStatus::Pending));
+    }
+
+    #[test]
+    fn scan_codex_state_files_reads_state_databases_and_processes_tasks() {
+        let app_connection = Connection::open_in_memory().expect("open app database");
+        schema::initialize(&app_connection).expect("initialize schema");
+        let directory = tempfile::tempdir().expect("create temp directory");
+        let codex_db = directory.path().join("state_5.sqlite");
+        seed_codex_state_database(&codex_db);
+
+        let summary = super::scan_codex_state_files(
+            &app_connection,
+            &[rule()],
+            directory.path(),
+            1_000,
+            86_400,
+        )
+        .expect("scan codex state files");
+
+        assert_eq!(summary.discovered, 1);
+        assert_eq!(summary.processed, 1);
+        let events = events::list_events(&app_connection).expect("list events");
+        assert_eq!(events.len(), 1);
     }
 }
