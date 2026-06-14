@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 #[derive(Debug, Clone)]
 pub struct TaskRecord {
     pub id: String,
@@ -8,7 +10,7 @@ pub struct TaskRecord {
     pub success: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Weekday {
     Mon,
     Tue,
