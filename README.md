@@ -84,28 +84,24 @@ CodeX Notice 使用 App 原生系统通知，不再通过 `osascript` 发送。
 
 ## 给别人安装
 
-当前项目打包产物是 `.app`：
+当前仓库已经包含 macOS DMG 安装包：
 
 ```text
-src-tauri/target/release/bundle/macos/CodeX Notice.app
+release/CodeX Notice_0.1.0_aarch64.dmg
 ```
 
-把这个 `CodeX Notice.app` 发送给别人即可。建议发送前先压缩成 zip：
-
-```bash
-cd src-tauri/target/release/bundle/macos
-zip -r "CodeX Notice.zip" "CodeX Notice.app"
-```
+把这个 `.dmg` 文件上传到 GitHub 后，别人下载即可安装。
 
 别人收到后：
 
-1. 解压 `CodeX Notice.zip`
-2. 把 `CodeX Notice.app` 拖到 `应用程序` 文件夹
-3. 双击打开
-4. 如果 macOS 提示无法验证开发者，需要在 `系统设置 -> 隐私与安全性` 中选择仍要打开
-5. 首次通知时允许通知权限
+1. 双击打开 `CodeX Notice_0.1.0_aarch64.dmg`
+2. 在弹出的安装窗口里，把 `CodeX Notice.app` 拖到 `Applications`
+3. 打开 `应用程序` 文件夹
+4. 双击 `CodeX Notice.app`
+5. 如果 macOS 提示无法验证开发者，需要在 `系统设置 -> 隐私与安全性` 中选择仍要打开
+6. 首次通知时允许通知权限
 
-当前 App 没有签名和公证，所以别人的 macOS 可能会出现安全提示。这是正常现象。正式发布给更多用户时，建议申请 Apple Developer 账号，对 App 进行签名、公证，并生成 `.dmg` 安装包。
+当前 App 没有签名和公证，所以别人的 macOS 可能会出现安全提示。这是正常现象。正式发布给更多用户时，建议申请 Apple Developer 账号，对 App 进行签名和公证。
 
 ## 从源码打包
 
@@ -138,6 +134,22 @@ npm run tauri build
 
 ```text
 src-tauri/target/release/bundle/macos/CodeX Notice.app
+```
+
+如果需要生成可分发的 DMG，可以使用当前项目采用的朴素 DMG 打包方式：
+
+```bash
+mkdir -p /private/tmp/codex-notice-dmg-root
+ditto "src-tauri/target/release/bundle/macos/CodeX Notice.app" "/private/tmp/codex-notice-dmg-root/CodeX Notice.app"
+ln -sf /Applications /private/tmp/codex-notice-dmg-root/Applications
+hdiutil create -volname "CodeX Notice" -srcfolder /private/tmp/codex-notice-dmg-root -ov -format UDZO "release/CodeX Notice_0.1.0_aarch64.dmg"
+hdiutil verify "release/CodeX Notice_0.1.0_aarch64.dmg"
+```
+
+生成后的 DMG 在：
+
+```text
+release/CodeX Notice_0.1.0_aarch64.dmg
 ```
 
 ## 验收建议
