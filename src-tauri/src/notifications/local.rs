@@ -1,6 +1,7 @@
 use std::process::Command;
 
 use rusqlite::Connection;
+use tauri_plugin_notification::NotificationExt;
 
 use crate::domain::decision::NotificationEventStatus;
 use crate::storage::error::StorageError;
@@ -48,6 +49,28 @@ impl LocalNotifier for MacOsNotifier {
                 String::from_utf8_lossy(&output.stderr).trim().to_string(),
             ))
         }
+    }
+}
+
+pub struct TauriNotifier {
+    app: tauri::AppHandle,
+}
+
+impl TauriNotifier {
+    pub fn new(app: tauri::AppHandle) -> Self {
+        Self { app }
+    }
+}
+
+impl LocalNotifier for TauriNotifier {
+    fn notify(&self, title: &str, body: &str) -> Result<(), NotificationError> {
+        self.app
+            .notification()
+            .builder()
+            .title(title)
+            .body(body)
+            .show()
+            .map_err(|error| NotificationError::CommandFailed(error.to_string()))
     }
 }
 

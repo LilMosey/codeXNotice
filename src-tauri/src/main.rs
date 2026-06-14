@@ -1,14 +1,16 @@
 fn main() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_notification::init())
         .invoke_handler(tauri::generate_handler![
             codex_notice::app_commands::get_rules,
             codex_notice::app_commands::save_rules,
             codex_notice::app_commands::get_events,
             codex_notice::app_commands::get_diagnostics
         ])
-        .setup(|_app| {
+        .setup(|app| {
+            let app_handle = app.handle().clone();
             std::thread::spawn(|| {
-                let notifier = codex_notice::notifications::local::MacOsNotifier;
+                let notifier = codex_notice::notifications::local::TauriNotifier::new(app_handle);
                 let loop_config = codex_notice::runtime::default_runtime_loop_config();
 
                 loop {
