@@ -86,6 +86,7 @@ pub fn detect_completed_agent_jobs(path: &Path) -> Result<Vec<TaskRecord>, Codex
 pub fn detect_recent_threads(
     path: &Path,
     minimum_updated_at_ms: i64,
+    maximum_updated_at_ms: i64,
 ) -> Result<Vec<TaskRecord>, CodexSqliteError> {
     let connection = Connection::open(path)?;
     if !table_exists(&connection, "threads")? {
@@ -98,11 +99,12 @@ pub fn detect_recent_threads(
         FROM threads
         WHERE updated_at_ms IS NOT NULL
           AND updated_at_ms >= ?1
+          AND updated_at_ms <= ?2
           AND source NOT LIKE '%subagent%'
         "#,
     )?;
 
-    let rows = statement.query_map([minimum_updated_at_ms], |row| {
+    let rows = statement.query_map([minimum_updated_at_ms, maximum_updated_at_ms], |row| {
         let id: String = row.get(0)?;
         let title: String = row.get(1)?;
         let created_at_ms: Option<i64> = row.get(2)?;
@@ -121,7 +123,7 @@ pub fn detect_recent_threads(
             timestamp_parts(completed_ms / 1000);
 
         Ok(TaskRecord {
-            id: format!("thread:{id}:{completed_ms}"),
+            id: format!("thread:{id}"),
             title: if title.trim().is_empty() {
                 "Codex 桌面任务".to_string()
             } else {
@@ -258,15 +260,17 @@ mod tests {
                 ) VALUES
                 ('thread-1', '普通 Codex 任务', 100, 140, 'vscode', '/tmp/project', 100000, 140000),
                 ('thread-2', '旧任务', 10, 20, 'vscode', '/tmp/project', 10000, 20000),
-                ('thread-3', '子任务审批', 100, 140, '{"subagent":{"other":"guardian"}}', '/tmp/project', 100000, 140000);
+                ('thread-3', '子任务审批', 100, 140, '{"subagent":{"other":"guardian"}}', '/tmp/project', 100000, 140000),
+                ('thread-4', '仍在更新的任务', 100, 180, 'vscode', '/tmp/project', 100000, 180000);
                 "#,
             )
             .expect("seed database");
 
-        let tasks = super::detect_recent_threads(db.path(), 120_000).expect("detect threads");
+        let tasks =
+            super::detect_recent_threads(db.path(), 120_000, 160_000).expect("detect threads");
 
         assert_eq!(tasks.len(), 1);
-        assert_eq!(tasks[0].id, "thread:thread-1:140000");
+        assert_eq!(tasks[0].id, "thread:thread-1");
         assert_eq!(tasks[0].title, "普通 Codex 任务");
         assert_eq!(tasks[0].duration_seconds, 40);
     }
@@ -276,7 +280,7 @@ mod tests {
         let db = NamedTempFile::new().expect("create temp database");
         Connection::open(db.path()).expect("open temp database");
 
-        let tasks = super::detect_recent_threads(db.path(), 1).expect("detect threads");
+        let tasks = super::detect_recent_threads(db.path(), 1, 2).expect("detect threads");
 
         assert!(tasks.is_empty());
     }

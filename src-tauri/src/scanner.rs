@@ -31,13 +31,15 @@ pub fn scan_codex_state_files(
     delay_ttl_seconds: i64,
 ) -> Result<ScanSummary, ScannerError> {
     let mut tasks = Vec::new();
-    let minimum_thread_updated_at_ms = (now_epoch_seconds - 120).max(0) * 1000;
+    let minimum_thread_updated_at_ms = (now_epoch_seconds - 600).max(0) * 1000;
+    let maximum_thread_updated_at_ms = (now_epoch_seconds - 60).max(0) * 1000;
 
     for database_path in codex_sqlite::find_state_databases(codex_directory)? {
         tasks.extend(codex_sqlite::detect_completed_agent_jobs(&database_path)?);
         tasks.extend(codex_sqlite::detect_recent_threads(
             &database_path,
             minimum_thread_updated_at_ms,
+            maximum_thread_updated_at_ms,
         )?);
     }
 
@@ -165,7 +167,7 @@ mod tests {
                 INSERT INTO threads (
                     id, title, created_at, updated_at, source, cwd, created_at_ms, updated_at_ms
                 ) VALUES (
-                    'thread-1', 'Desktop Thread', 940, 1000, 'vscode', '/tmp/project', 940000, 1000000
+                    'thread-1', 'Desktop Thread', 840, 900, 'vscode', '/tmp/project', 840000, 900000
                 );
                 "#,
             )
