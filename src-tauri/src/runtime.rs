@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use rusqlite::Connection;
 
@@ -13,6 +14,24 @@ pub struct RuntimeConfig {
     pub codex_directory: PathBuf,
     pub now_epoch_seconds: i64,
     pub delay_ttl_seconds: i64,
+}
+
+pub struct RuntimeLoopConfig {
+    pub app_database_path: PathBuf,
+    pub codex_directory: PathBuf,
+    pub delay_ttl_seconds: i64,
+    pub scan_interval: Duration,
+}
+
+impl RuntimeLoopConfig {
+    pub fn to_runtime_config(&self, now_epoch_seconds: i64) -> RuntimeConfig {
+        RuntimeConfig {
+            app_database_path: self.app_database_path.clone(),
+            codex_directory: self.codex_directory.clone(),
+            now_epoch_seconds,
+            delay_ttl_seconds: self.delay_ttl_seconds,
+        }
+    }
 }
 
 pub struct RuntimeSummary {
@@ -48,6 +67,15 @@ pub fn default_codex_directory() -> PathBuf {
     Path::new(&home).join(".codex")
 }
 
+pub fn default_runtime_loop_config() -> RuntimeLoopConfig {
+    RuntimeLoopConfig {
+        app_database_path: default_app_database_path(),
+        codex_directory: default_codex_directory(),
+        delay_ttl_seconds: 86_400,
+        scan_interval: Duration::from_secs(30),
+    }
+}
+
 pub fn run_once<N: LocalNotifier>(
     config: &RuntimeConfig,
     notifier: &N,
@@ -77,6 +105,7 @@ pub fn run_once<N: LocalNotifier>(
 #[cfg(test)]
 mod tests {
     use std::cell::RefCell;
+    use std::time::Duration;
 
     use rusqlite::Connection;
 
@@ -137,6 +166,24 @@ mod tests {
                 "#,
             )
             .expect("seed codex database");
+    }
+
+    #[test]
+    fn runtime_loop_config_builds_iteration_config_with_current_time() {
+        let temp = tempfile::tempdir().expect("create temp directory");
+        let loop_config = RuntimeLoopConfig {
+            app_database_path: temp.path().join("app.sqlite"),
+            codex_directory: temp.path().join("codex"),
+            delay_ttl_seconds: 600,
+            scan_interval: Duration::from_secs(15),
+        };
+
+        let config = loop_config.to_runtime_config(12_345);
+
+        assert_eq!(config.app_database_path, loop_config.app_database_path);
+        assert_eq!(config.codex_directory, loop_config.codex_directory);
+        assert_eq!(config.now_epoch_seconds, 12_345);
+        assert_eq!(config.delay_ttl_seconds, 600);
     }
 
     #[test]

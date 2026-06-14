@@ -15,6 +15,10 @@ pub enum CodexSqliteError {
 pub fn find_state_databases(directory: &Path) -> Result<Vec<PathBuf>, CodexSqliteError> {
     let mut files = Vec::new();
 
+    if !directory.exists() {
+        return Ok(files);
+    }
+
     for entry in std::fs::read_dir(directory)? {
         let entry = entry?;
         let path = entry.path();
@@ -89,6 +93,16 @@ mod tests {
         let files = super::find_state_databases(directory.path()).expect("find state databases");
 
         assert_eq!(files, vec![directory.path().join("state_5.sqlite")]);
+    }
+
+    #[test]
+    fn missing_codex_directory_returns_no_state_databases() {
+        let directory = tempfile::tempdir().expect("create temp directory");
+        let missing_path = directory.path().join("missing-codex");
+
+        let files = super::find_state_databases(&missing_path).expect("find state databases");
+
+        assert!(files.is_empty());
     }
 
     #[test]
