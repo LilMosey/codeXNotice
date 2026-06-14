@@ -46,6 +46,16 @@ pub fn record_task(
     Ok(())
 }
 
+pub fn task_exists(connection: &Connection, task_id: &str) -> Result<bool, StorageError> {
+    let count: i64 = connection.query_row(
+        "SELECT COUNT(*) FROM detected_tasks WHERE id = ?1",
+        params![task_id],
+        |row| row.get(0),
+    )?;
+
+    Ok(count > 0)
+}
+
 pub fn record_event(
     connection: &Connection,
     event_id: &str,
@@ -226,5 +236,17 @@ mod tests {
         let pending = list_pending_delayed_task_ids(&connection, "rule-1").expect("list pending");
 
         assert_eq!(pending, vec!["task-1".to_string(), "task-2".to_string()]);
+    }
+
+    #[test]
+    fn task_exists_returns_true_after_task_is_recorded() {
+        let connection = Connection::open_in_memory().expect("open database");
+        schema::initialize(&connection).expect("initialize schema");
+
+        assert!(!task_exists(&connection, "task-1").expect("check missing task"));
+
+        record_task(&connection, &task("task-1"), "codex-sqlite").expect("record task");
+
+        assert!(task_exists(&connection, "task-1").expect("check recorded task"));
     }
 }
